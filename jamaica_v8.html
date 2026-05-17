@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <!-- スマホ画面に最適化（ズーム禁止でアプリっぽく） -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>JAMAICA QUEST</title>
+    <!-- ドラクエ風のドット絵フォント -->
+    <link href="https://fonts.googleapis.com/css2?family=DotGothic16&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'DotGothic16', monospace;
+            background-color: #000;
+            color: #fff;
+            text-align: center;
+            margin: 0;
+            padding: 5px;
+            user-select: none;
+            touch-action: manipulation; /* スマホでのタップ遅延防止 */
+        }
+        h1 {
+            font-size: 22px;
+            margin: 10px 0 5px 0;
+            letter-spacing: 2px;
+            text-shadow: 2px 2px 0 #333;
+        }
+        .container {
+            background-color: #000;
+            max-width: 500px;
+            margin: 0 auto;
+            padding: 10px 5px;
+            border: 2px solid #fff;
+            box-shadow: 0 0 0 3px #000, 0 0 0 5px #fff;
+            border-radius: 2px;
+            box-sizing: border-box;
+        }
+        p {
+            font-size: 13px;
+            line-height: 1.3;
+            margin: 5px 0;
+        }
+        .target-box {
+            font-size: 18px;
+            margin: 5px 0;
+            color: #ffeb3b;
+        }
+        .dice-container {
+            display: flex;
+            justify-content: center;
+            gap: 8px;
+            margin: 10px 0;
+            min-height: 50px;
+        }
+        /* スマホ向けのコンパクトなサイコロ */
+        .dice {
+            width: 45px;
+            height: 45px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 22px;
+            font-weight: bold;
+            border: 2px solid #fff;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        .dice-black {
+            background-color: #000;
+            color: #fff;
+        }
+        .dice-white {
+            background-color: #fff;
+            color: #000;
+            cursor: pointer;
+        }
+        .dice-white:active {
+            background-color: #ddd;
+        }
+        .dice-white.disabled {
+            background-color: #555;
+            color: #222;
+            border-color: #555;
+            cursor: not-allowed;
+        }
+        .formula-box {
+            width: 90%;
+            padding: 8px;
+            font-size: 18px;
+            margin: 10px auto;
+            border: 2px solid #fff;
+            text-align: center;
+            background-color: #000;
+            min-height: 24px;
+            letter-spacing: 1px;
+            box-sizing: border-box;
+        }
+        .controls-container, .undo-redo-container {
+            display: flex;
+            justify-content: center;
+            gap: 6px;
+            margin-bottom: 10px;
+            flex-wrap: wrap;
+        }
+        button {
+            font-family: 'DotGothic16', monospace;
+            background-color: #000;
+            color: #fff;
+            border: 2px solid #fff;
+            border-radius: 2px;
+            padding: 6px 8px;
+            font-size: 14px;
+            cursor: pointer;
+            touch-action: manipulation;
+        }
+        button:active:not(:disabled) {
+            background-color: #fff;
+            color: #000;
+        }
+        button:disabled {
+            border-color: #555;
+            color: #555;
+            cursor: not-allowed;
+        }
+        /* スマホ向けに押しやすい四則演算ボタン */
+        .op-btn {
+            width: 40px;
+            height: 40px;
+            font-size: 18px;
+            padding: 0;
+        }
+        .action-btn {
+            padding: 8px 16px;
+            font-size: 16px;
+            margin: 5px;
+        }
+        .message {
+            margin-top: 10px;
+            font-size: 14px;
+            min-height: 40px;
+            line-height: 1.4;
+        }
+        
+        @keyframes rolling-anim {
+            0% { transform: rotate(0deg) scale(1); }
+            25% { transform: rotate(15deg) scale(1.1); }
+            50% { transform: rotate(0deg) scale(1); }
+            75% { transform: rotate(-15deg) scale(1.1); }
+            100% { transform: rotate(0deg) scale(1); }
+        }
+        .rolling {
+            animation: rolling-anim 0.1s infinite;
+        }
+    </style>
+</head>
+<body>
+
+<h1>🎲 JAMAICA QUEST 🎲</h1>
+<div class="container">
+    <p>＊ クロい サイコロの ごうけいちを<br>シロい サイコロ ５つで つくりだせ！</p>
+
+    <div class="target-box">
+        もくひょう: <span id="targetValue">--</span>
+    </div>
+    
+    <div class="dice-container" id="blackDiceContainer">
+        <!-- 黒いサイコロ -->
+    </div>
+
+    <p style="margin-bottom: 2px;">＊ つかえる すうじ</p>
+    <div class="dice-container" id="whiteDiceContainer">
+        <!-- 白いサイコロ -->
+    </div>
+
+    <!-- 入力された計算式 -->
+    <div id="formulaDisplay" class="formula-box"></div>
+
+    <!-- アンドゥ・リドゥ・カッコで閉じるボタン -->
+    <div class="undo-redo-container">
+        <button id="btnUndo" onclick="undo()" disabled>↩ もどす</button>
+        <button id="btnRedo" onclick="redo()" disabled>↪ やなおす</button>
+        <button id="btnWrap" onclick="wrapParentheses()" disabled>( ) でとじる</button>
+    </div>
+
+    <!-- 演算子入力ボタン群 -->
+    <div class="controls-container">
+        <button class="op-btn" onclick="clickOperator('+')">＋</button>
+        <button class="op-btn" onclick="clickOperator('-')">－</button>
+        <button class="op-btn" onclick="clickOperator('*')">×</button>
+        <button class="op-btn" onclick="clickOperator('/')">÷</button>
+        <button class="op-btn" onclick="clickOperator('(')">（</button>
+        <button class="op-btn" onclick="clickOperator(')')">）</button>
+        <button class="op-btn" onclick="clearFormula()">C</button>
+    </div>
+
+    <div>
+        <button class="action-btn" onclick="rollDice()">サイコロをふる</button>
+        <button class="action-btn" onclick="checkAnswer()">はんてい</button>
+    </div>
+
+    <div id="message" class="message"></div>
+</div>
+
+<script>
+    // ==========================================
+    // 🎵 Web Audio API を使ったレトロSE生成
+    // ==========================================
+    let audioCtx = null;
+    
+    function initAudio() {
+        if (!audioCtx) {
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+    }
+
+    function playClickSE() {
+        if (!audioCtx) return;
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(880, audioCtx.currentTime); 
+        osc.frequency.exponentialRampToValueAtTime(1760, audioCtx.currentTime + 0.05);
+        gain.gain.setValueAtTime(0.05, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.05);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.05);
+    }
+
+    function playRollSE() {
+        if (!audioCtx) return;
+        let time = audioCtx.currentTime;
+        for (let i = 0; i < 10; i++) {
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(150 + Math.random() * 150, time);
+            gain.gain.setValueAtTime(0.05, time);
+            gain.gain.linearRampToValueAtTime(0, time + 0.04);
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start(time);
+            osc.stop(time + 0.04);
+            time += 0.05;
+        }
+    }
+
+    function playErrorSE() {
+        if (!audioCtx) return;
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(120, audioCtx.currentTime);
+        gain.gain.setValueAtTime(0.05, audioCtx.currentTime);
+        gain.gain.linearRampToValueAtTime(0.001, audioCtx.currentTime + 0.3);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.3);
+    }
+
+    function playSuccessSE() {
+        if (!audioCtx) return;
+        const time = audioCtx.currentTime;
+        [523.25, 659.25, 783.99, 1046.50].forEach((freq, index) => {
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = 'square';
+            osc.frequency.setValueAtTime(freq, time + index * 0.1);
+            gain.gain.setValueAtTime(0.05, time + index * 0.1);
+            gain.gain.linearRampToValueAtTime(0, time + index * 0.1 + 0.3);
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start(time + index * 0.1);
+            osc.stop(time + index * 0.1 + 0.3);
+        });
+    }
+
+    // ==========================================
+    // 🎲 ゲームロジック
+    // ==========================================
+    let currentTarget = 0;
+    let currentWhites = [];
+    let formulaStr = "";
+    let usedWhites = [false, false, false, false, false];
+    let history = [];
+    let historyIndex = -1;
+    let isRolling = false;
+
+    function isSolvable(nums, target) {
+        if (nums.length === 1) return Math.abs(nums[0] - target) < 0.0001;
+        for (let i = 0; i < nums.length; i++) {
+            for (let j = i + 1; j < nums.length; j++) {
+                let nextNums = [];
+                for (let k = 0; k < nums.length; k++) {
+                    if (k !== i && k !== j) nextNums.push(nums[k]);
+                }
+                let a = nums[i]; let b = nums[j];
+                let ops = [a + b, a - b, b - a, a * b];
+                if (b !== 0) ops.push(a / b);
+                if (a !== 0) ops.push(b / a);
+
+                for (let op of ops) {
+                    nextNums.push(op);
+                    if (isSolvable(nextNums, target)) return true;
+                    nextNums.pop();
+                }
+            }
+        }
+        return false;
+    }
+
+    // ★バグ修正：要素を毎度確実に作り直す
+    function runDiceAnimation() {
+        return new Promise(resolve => {
+            const bContainer = document.getElementById("blackDiceContainer");
+            const wContainer = document.getElementById("whiteDiceContainer");
+            
+            // アニメーション用に要素を一旦リセットして構築
+            bContainer.innerHTML = `<div class="dice dice-black" id="bd1"></div><div class="dice dice-black" id="bd2"></div>`;
+            wContainer.innerHTML = "";
+            for(let i=0; i<5; i++) {
+                wContainer.innerHTML += `<div class="dice dice-white" id="wd${i}"></div>`;
+            }
+
+            const allDice = document.querySelectorAll('.dice');
+            allDice.forEach(d => d.classList.add('rolling'));
+
+            let ticks = 0;
+            const rollInterval = setInterval(() => {
+                document.getElementById("bd1").innerText = (Math.floor(Math.random() * 6) + 1) * 10;
+                document.getElementById("bd2").innerText = Math.floor(Math.random() * 6) + 1;
+                for(let i=0; i<5; i++) {
+                    const wd = document.getElementById(`wd${i}`);
+                    if(wd) wd.innerText = Math.floor(Math.random() * 6) + 1;
+                }
+                
+                ticks++;
+                if (ticks >= 10) {
+                    clearInterval(rollInterval);
+                    allDice.forEach(d => d.classList.remove('rolling'));
+                    resolve();
+                }
+            }, 50);
+        });
+    }
+
+    async function rollDice(isInitial = false) {
+        if (isRolling) return;
+        isRolling = true;
+        if (!isInitial) initAudio();
+        
+        document.getElementById("message").innerText = "";
+        formulaStr = "";
+        usedWhites = [false, false, false, false, false];
+        updateDisplay();
+
+        if (!isInitial) playRollSE();
+        await runDiceAnimation();
+
+        let found = false;
+        let black1, black2, whites;
+
+        while (!found) {
+            black1 = (Math.floor(Math.random() * 6) + 1) * 10;
+            black2 = Math.floor(Math.random() * 6) + 1;
+            let target = black1 + black2;
+            whites = [];
+            for (let i = 0; i < 5; i++) whites.push(Math.floor(Math.random() * 6) + 1);
+
+            if (isSolvable(whites, target)) {
+                currentTarget = target;
+                currentWhites = whites;
+                found = true;
+            }
+        }
+
+        document.getElementById("targetValue").innerText = currentTarget;
+        document.getElementById("bd1").innerText = black1;
+        document.getElementById("bd2").innerText = black2;
+        
+        // ★バグ修正：アニメーション完了後にクリックできるサイコロを再構築
+        const wContainer = document.getElementById("whiteDiceContainer");
+        wContainer.innerHTML = "";
+        for (let i = 0; i < 5; i++) {
+            wContainer.innerHTML += `<div class="dice dice-white" id="whiteDice-${i}" onclick="clickWhite(${i}, ${currentWhites[i]})">${currentWhites[i]}</div>`;
+        }
+
+        initHistory();
+        isRolling = false;
+    }
+
+    function initHistory() {
+        history = [];
+        historyIndex = -1;
+        saveState();
+        applyState(historyIndex);
+    }
+
+    function saveState() {
+        if (historyIndex < history.length - 1) history = history.slice(0, historyIndex + 1);
+        history.push({ formula: formulaStr, used: [...usedWhites] });
+        historyIndex++;
+    }
+
+    function getLastCharType() {
+        if (formulaStr.length === 0) return 'EMPTY';
+        const lastChar = formulaStr.slice(-1);
+        if (['+', '-', '*', '/'].includes(lastChar)) return 'OPERATOR';
+        if (lastChar === '(') return 'OPEN_PAREN';
+        if (lastChar === ')') return 'CLOSE_PAREN';
+        if (/\d/.test(lastChar)) return 'NUMBER';
+        return 'EMPTY';
+    }
+
+    function updateDisplay() {
+        const display = document.getElementById("formulaDisplay");
+        let visibleStr = formulaStr.replace(/\*/g, '×').replace(/\//g, '÷');
+        display.innerText = visibleStr || " ";
+        
+        for (let i = 0; i < 5; i++) {
+            const diceEl = document.getElementById(`whiteDice-${i}`);
+            if (diceEl) {
+                if (usedWhites[i]) diceEl.classList.add("disabled");
+                else diceEl.classList.remove("disabled");
+            }
+        }
+
+        document.getElementById("btnUndo").disabled = (historyIndex <= 0);
+        document.getElementById("btnRedo").disabled = (historyIndex >= history.length - 1);
+        
+        const lastType = getLastCharType();
+        document.getElementById("btnWrap").disabled = (formulaStr.length === 0 || lastType === 'OPERATOR' || lastType === 'OPEN_PAREN');
+    }
+
+    function applyState(index) {
+        const state = history[index];
+        formulaStr = state.formula;
+        usedWhites = [...state.used];
+        updateDisplay();
+        document.getElementById("message").innerText = "";
+    }
+
+    function undo() {
+        initAudio(); playClickSE();
+        if (historyIndex > 0) { historyIndex--; applyState(historyIndex); }
+    }
+
+    function redo() {
+        initAudio(); playClickSE();
+        if (historyIndex < history.length - 1) { historyIndex++; applyState(historyIndex); }
+    }
+
+    function wrapParentheses() {
+        initAudio();
+        const lastType = getLastCharType();
+        if (formulaStr.length === 0 || lastType === 'OPERATOR' || lastType === 'OPEN_PAREN') {
+            playErrorSE();
+            showMessage("＊ ブブー！ そこは カッコで とじられないぞ！", "#f44336");
+            return;
+        }
+        playClickSE();
+        formulaStr = "(" + formulaStr + ")";
+        saveState(); applyState(historyIndex);
+    }
+
+    function validateInput(inputType) {
+        const lastType = getLastCharType();
+        if (inputType === 'NUMBER') {
+            if (lastType === 'NUMBER' || lastType === 'CLOSE_PAREN') return "＊ ブブー！ そのすうじは えらべないぞ！";
+        } else if (inputType === 'OPERATOR') {
+            if (lastType === 'EMPTY' || lastType === 'OPERATOR' || lastType === 'OPEN_PAREN') return "＊ ブブー！ ここに きごうは おけないぞ！";
+        } else if (inputType === 'OPEN_PAREN') {
+            if (lastType === 'NUMBER' || lastType === 'CLOSE_PAREN') return "＊ ブブー！ そこは カッコを ひらけないぞ！";
+        } else if (inputType === 'CLOSE_PAREN') {
+            if (lastType === 'EMPTY' || lastType === 'OPERATOR' || lastType === 'OPEN_PAREN') return "＊ ブブー！ ここでは カッコを とじられないぞ！";
+            let openCount = (formulaStr.match(/\(/g) || []).length;
+            let closeCount = (formulaStr.match(/\)/g) || []).length;
+            if (closeCount >= openCount) return "＊ ブブー！ とじるための カッコが ないぞ！";
+        }
+        return null;
+    }
+
+    function clickWhite(index, value) {
+        initAudio();
+        if (usedWhites[index]) return;
+        const errorMsg = validateInput('NUMBER');
+        if (errorMsg) { playErrorSE(); showMessage(errorMsg, "#f44336"); return; }
+        
+        playClickSE();
+        usedWhites[index] = true;
+        formulaStr += value;
+        saveState(); applyState(historyIndex);
+    }
+
+    function clickOperator(op) {
+        initAudio();
+        let type = 'OPERATOR';
+        if (op === '(') type = 'OPEN_PAREN';
+        if (op === ')') type = 'CLOSE_PAREN';
+        const errorMsg = validateInput(type);
+        if (errorMsg) { playErrorSE(); showMessage(errorMsg, "#f44336"); return; }
+
+        playClickSE();
+        formulaStr += op;
+        saveState(); applyState(historyIndex);
+    }
+
+    function clearFormula() {
+        initAudio(); playClickSE();
+        if (formulaStr === "" && usedWhites.every(val => val === false)) return;
+        formulaStr = "";
+        usedWhites = [false, false, false, false, false];
+        saveState(); applyState(historyIndex);
+    }
+
+    function checkAnswer() {
+        initAudio();
+        if (!usedWhites.every(val => val === true)) {
+            playErrorSE(); showMessage("＊ ブブー！ シロいサイコロを ぜんぶ つかってくれ！", "#f44336"); return;
+        }
+        if (!formulaStr) {
+            playErrorSE(); showMessage("＊ ブブー！ けいさんしきが ないぞ！", "#f44336"); return;
+        }
+
+        let openCount = (formulaStr.match(/\(/g) || []).length;
+        let closeCount = (formulaStr.match(/\)/g) || []).length;
+        if (openCount !== closeCount) {
+            playErrorSE(); showMessage("＊ ブブー！ カッコが ただしく とじられてないぞ！", "#f44336"); return;
+        }
+        if (getLastCharType() === 'OPERATOR') {
+            playErrorSE(); showMessage("＊ ブブー！ さいごが きごうで おわっているぞ！", "#f44336"); return;
+        }
+
+        try {
+            const result = new Function('return ' + formulaStr)();
+            if (Math.abs(result - currentTarget) < 0.0001) {
+                playSuccessSE();
+                showMessage(`＊ せいかい！\nみごと ${currentTarget} を つくりだした！🎉`, "#ffeb3b");
+            } else {
+                playErrorSE();
+                showMessage(`＊ ざんねん！ けいさんけっかは ${result} だ。\nもくひょうの ${currentTarget} には なっていないぞ！`, "#f44336");
+            }
+        } catch (e) {
+            playErrorSE(); showMessage("＊ ブブー！ しきが まちがっているぞ！", "#f44336");
+        }
+    }
+
+    function showMessage(text, color) {
+        const messageEl = document.getElementById("message");
+        messageEl.innerHTML = text.replace(/\n/g, '<br>');
+        messageEl.style.color = color;
+    }
+
+    window.onload = () => rollDice(true);
+</script>
+
+</body>
+</html>
